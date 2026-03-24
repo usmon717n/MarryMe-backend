@@ -1,0 +1,282 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  phone        String?
+  password     String?
+  role         Role         @default(CLIENT)
+  authProvider AuthProvider @default(LOCAL)
+  googleId     String?      @unique
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  profile       Profile?
+  orders        Order[]
+  reviews       Review[]
+  notifications Notification[]
+
+  @@index([email])
+  @@index([googleId])
+}
+
+model Profile {
+  id        String  @id @default(cuid())
+  userId    String  @unique
+  firstName String
+  lastName  String
+  avatar    String?
+  city      String?
+  lang      Lang    @default(UZ)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Service {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  category  Category
+  isActive  Boolean  @default(true)
+  basePrice Int
+  images          String[]
+  coverImage      String?  @default("")
+  regions         String[] @default([])
+  customCategory  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  translations ServiceTranslation[]
+  packages     Package[]
+  orders       Order[]
+  reviews      Review[]
+
+  @@index([category, isActive])
+}
+
+model ServiceTranslation {
+  id          String   @id @default(cuid())
+  serviceId   String
+  lang        Lang
+  name        String
+  description String   @db.Text
+  features    String[]
+
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, lang])
+}
+
+model Package {
+  id        String   @id @default(cuid())
+  serviceId String
+  slug      String
+  price     Int
+  isPopular Boolean  @default(false)
+  regions   String[] @default([])
+  emoji     String   @default("🎁")
+
+  translations PackageTranslation[]
+  subServices  PackageSubService[]
+  service      Service              @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  orders       Order[]
+
+  @@unique([serviceId, slug])
+}
+
+model PackageTranslation {
+  id        String   @id @default(cuid())
+  packageId String
+  lang      Lang
+  name      String
+  includes  String[]
+
+  package Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@unique([packageId, lang])
+}
+
+model PackageSubService {
+  id          String  @id @default(cuid())
+  packageId   String
+  slug        String
+  emoji       String  @default("✨")
+  images      String[] @default([])
+  sortOrder   Int      @default(0)
+
+  translations PackageSubServiceTranslation[]
+  package      Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@unique([packageId, slug])
+}
+
+model PackageSubServiceTranslation {
+  id           String @id @default(cuid())
+  subServiceId String
+  lang         Lang
+  name         String
+  shortDesc    String
+  fullDesc     String @db.Text
+
+  subService PackageSubService @relation(fields: [subServiceId], references: [id], onDelete: Cascade)
+
+  @@unique([subServiceId, lang])
+}
+
+model Order {
+  id             String      @id @default(cuid())
+  orderNumber    String      @unique @default(cuid())
+  userId         String
+  serviceId      String
+  packageId      String?
+  status         OrderStatus @default(PENDING)
+  eventDate      DateTime
+  eventType      String
+  guestCount     Int?
+  venue          String?
+  notes          String?     @db.Text
+  totalPrice     Int
+  advancePayment Int?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id])
+  service Service  @relation(fields: [serviceId], references: [id])
+  package Package? @relation(fields: [packageId], references: [id], onDelete: SetNull)
+
+  notifications Notification[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Portfolio {
+  id          String    @id @default(cuid())
+  category    Category
+  coverImage  String
+  images      String[]
+  videoUrl    String?
+  eventDate   DateTime?
+  isPublished Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+
+  translations PortfolioTranslation[]
+
+  @@index([category, isPublished])
+}
+
+model PortfolioTranslation {
+  id          String  @id @default(cuid())
+  portfolioId String
+  lang        Lang
+  title       String
+  description String? @db.Text
+  location    String?
+
+  portfolio Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@unique([portfolioId, lang])
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  userId    String
+  serviceId String
+  rating    Int
+  comment   String   @db.Text
+  isVisible Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id])
+  service Service @relation(fields: [serviceId], references: [id])
+
+  @@unique([userId, serviceId])
+  @@index([serviceId, isVisible])
+}
+
+model ContactRequest {
+  id        String        @id @default(cuid())
+  name      String
+  phone     String
+  email     String?
+  message   String        @db.Text
+  status    ContactStatus @default(NEW)
+  createdAt DateTime      @default(now())
+
+  @@index([status, createdAt])
+}
+
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  body      String           @db.Text
+  isRead    Boolean          @default(false)
+  orderId   String?
+  createdAt DateTime         @default(now())
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
+
+enum NotificationType {
+  WELCOME
+  ORDER_CREATED
+  ORDER_STATUS
+  SYSTEM
+}
+
+enum Role {
+  CLIENT
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum AuthProvider {
+  LOCAL
+  GOOGLE
+}
+
+enum Lang {
+  UZ
+  RU
+  EN
+}
+
+enum Category {
+  WEDDING
+  LOVE_STORY
+  PROPOSAL
+  BIRTHDAY
+  ANNIVERSARY
+  HENNA_NIGHT
+  CORPORATE
+  CUSTOM
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ContactStatus {
+  NEW
+  IN_REVIEW
+  RESOLVED
+}
